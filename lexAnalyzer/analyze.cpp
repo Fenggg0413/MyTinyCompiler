@@ -59,7 +59,9 @@ void printCode(const std::vector<Token> &tokens) {
 int main(int argc, char *argv[]) {
   if (argc == 2) {
     auto tokens = analyze(argv[1]);
+    std::cout << "词法单元: \n";
     printToken(tokens);
+    std::cout << "\n词法分析处理后的代码: \n";
     printCode(tokens);
   } else {
     std::cerr << "error: no input files" << std::endl;
