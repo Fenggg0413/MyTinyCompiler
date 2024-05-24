@@ -1,7 +1,10 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <istream>
 #include <set>
+#include <sstream>
+#include <string>
 #include <vector>
 
 // 词法单元的类型
@@ -34,14 +37,15 @@ std::set<std::string> keywords{
 		"for", "do", "while"
 };
 
-bool isMatch(char expected, std::ifstream &str);         // 是否匹配提供的字符
+bool isMatch(char expected, std::istream &str);         // 是否匹配提供的字符
 bool isDigit(char ch);                                   // 是否匹配数字
 bool isAlpha(char ch);                                   // 是否匹配字母下划线
 bool isAlphaNumeric(char ch);                            // 是否匹配字母下划线数字
-std::string getNum(std::ifstream &str);                  // 获取常数
-std::string getString(std::ifstream &str);               // 获取字符串常量
-std::string getIdentifier(std::ifstream &str);           // 获取标字符或关键字
-std::vector<Token> analyze(const std::string &filename); // 词法分析
+std::string getNum(std::istream &str);                  // 获取常数
+std::string getString(std::istream &str);               // 获取字符串常量
+std::string getIdentifier(std::istream &str);           // 获取标字符或关键字
+std::vector<Token> analyzeFile(const std::string &input); // 词法分析(处理文件)
+std::vector<Token> analyzeStr(const std::string &src); // 词法分析(处理输入字符串)
 
 // 打印扫描出的所有词法单元
 void printToken(const std::vector<Token> &tokens) {
@@ -57,19 +61,34 @@ void printCode(const std::vector<Token> &tokens) {
 }
 
 int main(int argc, char *argv[]) {
-  if (argc == 2) {
-    auto tokens = analyze(argv[1]);
-    std::cout << "词法单元: \n";
-    printToken(tokens);
-    std::cout << "\n词法分析处理后的代码: \n";
-    printCode(tokens);
-  } else {
-    std::cerr << "error: no input files" << std::endl;
+  while (true) {
+    if (argc == 2) {
+      auto tokens = analyzeFile(argv[1]);
+      std::cout << "词法单元: \n";
+      printToken(tokens);
+      std::cout << "\n词法分析处理后的代码: \n";
+      printCode(tokens);
+      break;
+    } else if (argc == 1) {
+      std::cout << ">> ";
+      std::string src{};
+      std::getline(std::cin, src);
+      if (src == "quit")  // 输入quit退出
+        break;
+      auto tokens = analyzeStr(src);
+      std::cout << "词法单元: \n";
+      printToken(tokens);
+      std::cout << "\n词法分析处理后的代码: \n";
+      printCode(tokens);
+    } else {
+      std::cerr << "error: Invalid input\n" << std::endl;
+      exit(-1);
+    }
   }
   return 0;
 }
 
-bool isMatch(char expected, std::ifstream &str) {
+bool isMatch(char expected, std::istream &str) {
   if (str.eof())
     return false;
   if (str.peek() == expected) {
@@ -79,7 +98,7 @@ bool isMatch(char expected, std::ifstream &str) {
   return false;
 }
 
-std::string getString(std::ifstream &str) {
+std::string getString(std::istream &str) {
   std::string res{};
   // 字符串字面值用""包围
   while (str.peek() != '"' && !str.eof()) {
@@ -90,7 +109,7 @@ std::string getString(std::ifstream &str) {
   return res;
 }
 
-std::string getNum(std::ifstream &str) {
+std::string getNum(std::istream &str) {
   std::string num{};
   str.unget();
   // 读取所有数字字符
@@ -110,7 +129,7 @@ std::string getNum(std::ifstream &str) {
 
 // 获取标识符或关键字
 // 标识符正则表达式[a-zA-Z_][a-zA-Z_0-9]*
-std::string getIdentifier(std::ifstream &str) {
+std::string getIdentifier(std::istream &str) {
   std::string identifier{};
   str.unget();
   // 识别[a-zA-Z_0-9]*过程
@@ -126,9 +145,9 @@ bool isAlpha(char ch) {
 }
 bool isAlphaNumeric(char ch) { return isAlpha(ch) || isDigit(ch); }
 
-// 词法分析
-std::vector<Token> analyze(const std::string &filename) {
-  std::ifstream str(filename);
+// 词法分析(处理文件)
+std::vector<Token> analyzeFile(const std::string &input) {
+  std::ifstream str(input);
   if (!str.is_open())
     exit(-1);
   char ch;
@@ -222,5 +241,101 @@ std::vector<Token> analyze(const std::string &filename) {
     }
   }
   str.close();
+  return std::move(tokens);
+}
+
+// 词法分析(处理输入字符串)
+std::vector<Token> analyzeStr(const std::string &src) {
+  std::istringstream str(src);
+  char ch;
+  std::vector<Token> tokens;
+  // 逐个处理输入的字符直到文件尾
+  while (str >> ch) {
+    switch (ch) {
+    case '{':
+      tokens.push_back({DELIMITER, "{"});
+      break;
+    case '}':
+      tokens.push_back({DELIMITER, "}"});
+      break;
+    case ',':
+      tokens.push_back({DELIMITER, ","});
+      break;
+    case ';':
+      tokens.push_back({DELIMITER, ";"});
+      break;
+    case '(':
+      tokens.push_back({DELIMITER, "("});
+      break;
+    case ')':
+      tokens.push_back({DELIMITER, ")"});
+      break;
+    case '+':
+      tokens.push_back({OPERATOR, "+"});
+      break;
+    case '-':
+      tokens.push_back({OPERATOR, "-"});
+      break;
+    case '*':
+      tokens.push_back({OPERATOR, "*"});
+      break;
+      // 对于操作符 = ! > <, 需要考虑后一个字符是否是 = 的情况
+      // 因为这代表 == != >= <= 操作符
+    case '=':
+      if (isMatch('=', str))
+        tokens.push_back({OPERATOR, "=="});
+      else
+        tokens.push_back({OPERATOR, "="});
+      break;
+    case '!':
+      if (isMatch('=', str))
+        tokens.push_back({OPERATOR, "!="});
+      else
+        tokens.push_back({OPERATOR, "!"});
+      break;
+    case '>':
+      if (isMatch('=', str))
+        tokens.push_back({OPERATOR, ">="});
+      else
+        tokens.push_back({OPERATOR, ">"});
+      break;
+    case '<':
+      if (isMatch('=', str))
+        tokens.push_back({OPERATOR, "<="});
+      else
+        tokens.push_back({OPERATOR, "<"});
+      break;
+      // 除法操作符'/'需要考虑是否是注释操作符'//'的情况
+    case '/':
+      if (isMatch('/', str)) {
+        while (str.peek() != '\n' && !str.eof()) // 跳过注释
+          str.get();
+      } else {
+        tokens.push_back({OPERATOR, "/"});
+      }
+    // 跳过空白
+    case ' ':
+    case '\t':
+    case '\r':
+    case '\n':
+      break;
+    case '"':
+      tokens.push_back({STRING, getString(str)});
+
+    default:
+      if (isDigit(ch)) { // 识别到数字
+        tokens.push_back({CONSTANT, getNum(str)});
+      } else if (isAlpha(ch)) { // 识别到字母下划线
+        std::string identifier = getIdentifier(str);
+        if (keywords.find(identifier) != keywords.end())
+          // 如果返回的字符串匹配到关键字
+          tokens.push_back({KEYWORD, identifier});
+        else
+          // 未匹配到关键字则说明是标识符
+          tokens.push_back({IDENTIFIER, identifier});
+      }
+      break;
+    }
+  }
   return std::move(tokens);
 }
